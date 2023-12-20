@@ -39,7 +39,7 @@ GraspPlanner::GraspPlanner(const rclcpp::NodeOptions & options, GraspDetectorBas
 {
   ROSParameters::getPlanningParams(this, param_);
   callback_group_subscriber3_ = this->create_callback_group(
-    rclcpp::callback_group::CallbackGroupType::MutuallyExclusive);
+    rclcpp::CallbackGroupType::MutuallyExclusive);
   auto service = [this](const std::shared_ptr<rmw_request_id_t> request_header,
       const std::shared_ptr<GraspPlanning::Request> req,
       const std::shared_ptr<GraspPlanning::Response> res) -> void {

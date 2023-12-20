@@ -49,7 +49,7 @@ GraspDetectorGPD::GraspDetectorGPD(const rclcpp::NodeOptions & options)
   this->get_parameter_or("object_detect", object_detect, false);
 
   callback_group_subscriber1_ = this->create_callback_group(
-    rclcpp::callback_group::CallbackGroupType::MutuallyExclusive);
+    rclcpp::CallbackGroupType::MutuallyExclusive);
   auto sub1_opt = rclcpp::SubscriptionOptions();
   sub1_opt.callback_group = callback_group_subscriber1_;
 
@@ -87,7 +87,7 @@ GraspDetectorGPD::GraspDetectorGPD(const rclcpp::NodeOptions & options)
 #endif
   // GraspDetector::GraspDetectionParameters detection_param;
   ROSParameters::getDetectionParams(this, detection_param_);
-  grasp_detector_ = std::make_shared<GraspDetector>(detection_param_);
+  grasp_detector_ = std::make_shared<gpd::GraspDetector>(detection_param_);
   RCLCPP_INFO(logger_, "ROS2 Grasp Library node up...");
 
   detector_thread_ = new std::thread(&GraspDetectorGPD::onInit, this);
@@ -102,13 +102,15 @@ void GraspDetectorGPD::onInit()
   while (rclcpp::ok()) {
     if (has_cloud_) {
       // detect grasps in point cloud
-      std::vector<Grasp> grasps = detectGraspPosesInTopic();
+      std::vector<std::unique_ptr<gpd::candidate::Hand>> grasps = detectGraspPosesInTopic();
       // visualize grasps in rviz
       if (grasps_rviz_pub_) {
-        const HandSearch::Parameters & params = grasp_detector_->getHandSearchParameters();
-        grasps_rviz_pub_->publish(convertToVisualGraspMsg(grasps, params.hand_outer_diameter_,
-          params.hand_depth_,
-          params.finger_width_, params.hand_height_, frame_));
+        const gpd::candidate::HandSearch::Parameters & params = grasp_detector_->getHandSearchParameters();
+        grasps_rviz_pub_->publish(convertToVisualGraspMsg(grasps,
+              params.hand_geometry_.outer_diameter_,
+              params.hand_geometry_.depth_,
+              params.hand_geometry_.finger_width_,
+              params.hand_geometry_.height_, frame_));
       }
 
       // reset the system
@@ -121,10 +123,10 @@ void GraspDetectorGPD::onInit()
   }
 }
 
-std::vector<Grasp> GraspDetectorGPD::detectGraspPosesInTopic()
+std::vector<std::unique_ptr<gpd::candidate::Hand>> GraspDetectorGPD::detectGraspPosesInTopic()
 {
   // detect grasp poses
-  std::vector<Grasp> grasps;
+  std::vector<std::unique_ptr<gpd::candidate::Hand>> grasps;
 
   {
     // preprocess the point cloud
@@ -140,7 +142,7 @@ std::vector<Grasp> GraspDetectorGPD::detectGraspPosesInTopic()
       std::make_shared<grasp_msgs::msg::GraspConfigList>(selected_grasps_msg));
   }
   grasps_pub_->publish(selected_grasps_msg);
-  RCLCPP_INFO(logger_, "Published %d highest-scoring grasps.", selected_grasps_msg.grasps.size());
+  RCLCPP_INFO(logger_, "Published %ld highest-scoring grasps.", selected_grasps_msg.grasps.size());
 
   return grasps;
 }
@@ -176,7 +178,7 @@ void GraspDetectorGPD::cloud_callback(const sensor_msgs::msg::PointCloud2::Share
     {
       PointCloudPointNormal::Ptr cloud(new PointCloudPointNormal);
       pcl::fromROSMsg(*msg, *cloud);
-      cloud_camera_ = new CloudCamera(cloud, 0, view_points);
+      cloud_camera_ = new gpd::util::Cloud(cloud, 0, view_points);
       cloud_camera_header_ = msg->header;
     } else {
       PointCloudRGBA::Ptr cloud(new PointCloudRGBA);
@@ -184,9 +186,9 @@ void GraspDetectorGPD::cloud_callback(const sensor_msgs::msg::PointCloud2::Share
 
       // filter workspace
       for (uint32_t i = 0; i < cloud->size(); i++) {
-        if (cloud->points[i].x > detection_param_.workspace_[0] && cloud->points[i].x < detection_param_.workspace_[1] &&
-            cloud->points[i].y > detection_param_.workspace_[2] && cloud->points[i].y < detection_param_.workspace_[3] &&
-            cloud->points[i].z > detection_param_.workspace_[4] && cloud->points[i].z < detection_param_.workspace_[5]) {
+        if (cloud->points[i].x > detection_param_.workspace_grasps_[0] && cloud->points[i].x < detection_param_.workspace_grasps_[1] &&
+            cloud->points[i].y > detection_param_.workspace_grasps_[2] && cloud->points[i].y < detection_param_.workspace_grasps_[3] &&
+            cloud->points[i].z > detection_param_.workspace_grasps_[4] && cloud->points[i].z < detection_param_.workspace_grasps_[5]) {
           continue;
         } else {
           cloud->points[i].x = std::numeric_limits<float>::quiet_NaN();
@@ -262,10 +264,10 @@ void GraspDetectorGPD::cloud_callback(const sensor_msgs::msg::PointCloud2::Share
         msg2.fields[3].datatype = 7;
         filtered_pub_->publish(msg2);
       }
-      cloud_camera_ = new CloudCamera(cloud, 0, view_points);
+      cloud_camera_ = new gpd::util::Cloud(cloud, 0, view_points);
       cloud_camera_header_ = msg->header;
     }
-    RCLCPP_INFO(logger_, "Received cloud with %d points and normals.",
+    RCLCPP_INFO(logger_, "Received cloud with %ld points and normals.",
       cloud_camera_->getCloudProcessed()->size());
 
     has_cloud_ = true;
@@ -295,8 +297,12 @@ void GraspDetectorGPD::object_callback(const people_msgs::msg::ObjectsInMasks::S
   }
 }
 #endif
+/**
+ * hands -- vector of gpg Grasp hand configurations
+ *
+ */
 grasp_msgs::msg::GraspConfigList GraspDetectorGPD::createGraspListMsg(
-  const std::vector<Grasp> & hands)
+  const std::vector<std::unique_ptr<gpd::candidate::Hand>> & hands)
 {
   grasp_msgs::msg::GraspConfigList msg;
 
@@ -310,24 +316,26 @@ grasp_msgs::msg::GraspConfigList GraspDetectorGPD::createGraspListMsg(
   return msg;
 }
 
-grasp_msgs::msg::GraspConfig GraspDetectorGPD::convertToGraspMsg(const Grasp & hand)
+/**
+ * Grasp hand -- A gpg hand configuration
+ */
+grasp_msgs::msg::GraspConfig GraspDetectorGPD::convertToGraspMsg(const std::unique_ptr<gpd::candidate::Hand> & hand)
 {
   grasp_msgs::msg::GraspConfig msg;
-  pointEigenToMsg(hand.getGraspBottom(), msg.bottom);
-  pointEigenToMsg(hand.getGraspTop(), msg.top);
-  pointEigenToMsg(hand.getGraspSurface(), msg.surface);
-  vectorEigenToMsg(hand.getApproach(), msg.approach);
-  vectorEigenToMsg(hand.getBinormal(), msg.binormal);
-  vectorEigenToMsg(hand.getAxis(), msg.axis);
-  msg.width.data = hand.getGraspWidth();
-  msg.score.data = hand.getScore();
-  pointEigenToMsg(hand.getSample(), msg.sample);
-
+  pointEigenToMsg(hand->getGraspBottom(), msg.bottom);
+  pointEigenToMsg(hand->getGraspTop(), msg.top);
+  pointEigenToMsg(hand->getGraspSurface(), msg.surface);
+  vectorEigenToMsg(hand->getApproach(), msg.approach);
+  vectorEigenToMsg(hand->getBinormal(), msg.binormal);
+  vectorEigenToMsg(hand->getAxis(), msg.axis);
+  msg.width.data = hand->getGraspWidth();
+  msg.score.data = hand->getScore();
+  pointEigenToMsg(hand->getSample(), msg.sample);
   return msg;
 }
 
 visualization_msgs::msg::MarkerArray GraspDetectorGPD::convertToVisualGraspMsg(
-  const std::vector<Grasp> & hands,
+  const std::vector<std::unique_ptr<gpd::candidate::Hand>> & hands,
   double outer_diameter, double hand_depth, double finger_width, double hand_height,
   const std::string & frame_id)
 {
@@ -341,23 +349,23 @@ visualization_msgs::msg::MarkerArray GraspDetectorGPD::convertToVisualGraspMsg(
     base_center;
 
   for (uint32_t i = 0; i < hands.size(); i++) {
-    left_bottom = hands[i].getGraspBottom() - (hw - 0.5 * finger_width) * hands[i].getBinormal();
-    right_bottom = hands[i].getGraspBottom() + (hw - 0.5 * finger_width) * hands[i].getBinormal();
-    left_top = left_bottom + hand_depth * hands[i].getApproach();
-    right_top = right_bottom + hand_depth * hands[i].getApproach();
+    left_bottom = hands[i]->getPosition() - (hw - 0.5 * finger_width) * hands[i]->getBinormal();
+    right_bottom = hands[i]->getPosition() + (hw - 0.5 * finger_width) * hands[i]->getBinormal();
+    left_top = left_bottom + hand_depth * hands[i]->getApproach();
+    right_top = right_bottom + hand_depth * hands[i]->getApproach();
     left_center = left_bottom + 0.5 * (left_top - left_bottom);
     right_center = right_bottom + 0.5 * (right_top - right_bottom);
-    base_center = left_bottom + 0.5 * (right_bottom - left_bottom) - 0.01 * hands[i].getApproach();
-    approach_center = base_center - 0.04 * hands[i].getApproach();
+    base_center = left_bottom + 0.5 * (right_bottom - left_bottom) - 0.01 * hands[i]->getApproach();
+    approach_center = base_center - 0.04 * hands[i]->getApproach();
 
     base = createHandBaseMarker(left_bottom, right_bottom,
-        hands[i].getFrame(), 0.02, hand_height, i, frame_id);
+        hands[i]->getFrame(), 0.02, hand_height, i, frame_id);
     left_finger = createFingerMarker(left_center,
-        hands[i].getFrame(), hand_depth, finger_width, hand_height, i * 3, frame_id);
+        hands[i]->getFrame(), hand_depth, finger_width, hand_height, i * 3, frame_id);
     right_finger = createFingerMarker(right_center,
-        hands[i].getFrame(), hand_depth, finger_width, hand_height, i * 3 + 1, frame_id);
+        hands[i]->getFrame(), hand_depth, finger_width, hand_height, i * 3 + 1, frame_id);
     approach = createFingerMarker(approach_center,
-        hands[i].getFrame(), 0.08, finger_width, hand_height, i * 3 + 2, frame_id);
+        hands[i]->getFrame(), 0.08, finger_width, hand_height, i * 3 + 2, frame_id);
 
     marker_array.markers.push_back(left_finger);
     marker_array.markers.push_back(right_finger);

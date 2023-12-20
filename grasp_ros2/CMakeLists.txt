@@ -51,15 +51,21 @@ find_package(trajectory_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(Eigen3 REQUIRED)
 
+# Opencv2
+find_library(opencv_LIBRARIES opencv_core REQUIRED)
+find_path(opencv_INCLUDE_DIRS opencv2 PATH_SUFFIXES opencv4 REQUIRED)
+
 # GPG
-find_library(gpg_LIBRARIES grasp_candidates_generator)
-find_path(gpg_INCLUDE_DIRS gpg/grasp.h)
+find_library(gpg_LIBRARIES grasp_candidates_generator REQUIRED)
+find_path(gpg_INCLUDE_DIRS gpg/grasp.h REQUIRED)
 # GPD
-find_library(gpd_LIBRARIES grasp_pose_detection)
-find_path(gpd_INCLUDE_DIRS gpd/grasp_detector.h)
+#find_library(gpd_LIBRARIES grasp_pose_detection REQUIRED)
+find_library(gpd_LIBRARIES gpd REQUIRED)
+find_path(gpd_INCLUDE_DIRS gpd/grasp_detector.h REQUIRED)
 
 # PCL
-find_package(PCL 1.8.1 EXACT)
+#find_package(PCL 1.8.1 EXACT)
+find_package(PCL)
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
@@ -81,6 +87,7 @@ endif
   ${tf2_INCLUDE_DIRS}
   ${gpg_INCLUDE_DIRS}
   ${gpd_INCLUDE_DIRS}
+  ${opencv_INCLUDE_DIRS}
 )
 
 # create ament index resource which references the libraries in the binary dir
@@ -94,6 +101,7 @@ add_library(${libgrasp_detect} SHARED
   src/grasp_detector_gpd.cpp)
 target_compile_definitions(${libgrasp_detect}
   PRIVATE "GRASP_ROS2_BUILDING_DLL")
+if(BUILD_RECOGNIZE_PICK STREQUAL "ON")
 ament_target_dependencies(${libgrasp_detect}
   "class_loader"
   "rclcpp"
@@ -101,14 +109,23 @@ ament_target_dependencies(${libgrasp_detect}
   "grasp_msgs"
   "sensor_msgs"
   "moveit_msgs"
-if(BUILD_RECOGNIZE_PICK STREQUAL "ON")
   "people_msgs"
-endif()
   "visualization_msgs")
+else()
+ament_target_dependencies(${libgrasp_detect}
+  "class_loader"
+  "rclcpp"
+  "rclcpp_components"
+  "grasp_msgs"
+  "sensor_msgs"
+  "moveit_msgs"
+  "visualization_msgs")
+endif()
 target_link_libraries(${libgrasp_detect}
   ${gpg_LIBRARIES}
   ${gpd_LIBRARIES}
   ${PCL_LIBRARIES}
+  ${opencv_LIBRARIES}
 )
 rclcpp_components_register_nodes(${libgrasp_detect} "grasp_ros2::GraspDetectorGPD")
 set(node_plugins "${node_plugins}grasp_ros2::GraspDetectorGPD;$<TARGET_FILE:${libgrasp_detect}>\n")

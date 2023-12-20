@@ -21,6 +21,7 @@
 // ROS2 projects
 #include <gpd/grasp_detector.h>
 #include "grasp_library/ros2/grasp_planner.hpp"
+#include "grasp_library/ros2/grasp_detector_base.hpp"
 
 namespace grasp_ros2
 {
@@ -35,7 +36,7 @@ class ROSParameters
 public:
   static void getDetectionParams(
     rclcpp::Node * node,
-    GraspDetector::GraspDetectionParameters & param);
+    gpd::GraspDetector::GraspDetectionParameters & param);
   static void getPlanningParams(rclcpp::Node * Node, GraspPlanner::GraspPlanningParameters & param);
 };
 

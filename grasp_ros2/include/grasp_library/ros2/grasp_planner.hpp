@@ -23,6 +23,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/static_transform_broadcaster.h>
+#include "tf2_ros/buffer.h"
 #include <trajectory_msgs/msg/joint_trajectory_point.hpp>
 
 #include <condition_variable>
@@ -151,7 +152,7 @@ private:
   rclcpp::Logger logger_ = rclcpp::get_logger("GraspPlanner");
   /*buffer for grasps to be returned from this service*/
   std::vector<moveit_msgs::msg::Grasp> moveit_grasps_;
-  rclcpp::callback_group::CallbackGroup::SharedPtr callback_group_subscriber3_;
+  rclcpp::CallbackGroup::SharedPtr callback_group_subscriber3_;
   rclcpp::Service<moveit_msgs::srv::GraspPlanning>::SharedPtr grasp_srv_; /*grasp service*/
   tf2_ros::Buffer * tfBuffer_; /*buffer for transformation listener*/
   std::shared_ptr<tf2_ros::TransformListener> tfListener_; /*Transform listener*/

@@ -22,36 +22,32 @@ namespace grasp_ros2
 
 void ROSParameters::getDetectionParams(
   rclcpp::Node * node,
-  GraspDetector::GraspDetectionParameters & param)
+  gpd::GraspDetector::GraspDetectionParameters & param)
 {
   // Read hand geometry parameters.
-  node->get_parameter_or("finger_width", param.hand_search_params.finger_width_, 0.005);
-  node->get_parameter_or("hand_outer_diameter", param.hand_search_params.hand_outer_diameter_,
+  node->get_parameter_or("finger_width", param.hand_search_params.hand_geometry_.finger_width_, 0.005);
+  node->get_parameter_or("hand_outer_diameter", param.hand_search_params.hand_geometry_.outer_diameter_,
     0.12);
-  node->get_parameter_or("hand_depth", param.hand_search_params.hand_depth_, 0.06);
-  node->get_parameter_or("hand_height", param.hand_search_params.hand_height_, 0.02);
-  node->get_parameter_or("init_bite", param.hand_search_params.init_bite_, 0.01);
+  node->get_parameter_or("hand_depth", param.hand_search_params.hand_geometry_.depth_, 0.06);
+  node->get_parameter_or("hand_height", param.hand_search_params.hand_geometry_.height_, 0.02);
+  node->get_parameter_or("init_bite", param.hand_search_params.hand_geometry_.init_bite_, 0.01);
 
   // Read local hand search parameters.
   node->get_parameter_or("nn_radius", param.hand_search_params.nn_radius_frames_, 0.01);
   node->get_parameter_or("num_orientations", param.hand_search_params.num_orientations_, 8);
-  node->get_parameter_or("num_samples", param.hand_search_params.num_samples_, 100);
+  node->get_parameter_or("num_samples", param.generator_params.num_samples_, 100);
   node->get_parameter_or("num_threads", param.hand_search_params.num_threads_, 4);
-  node->get_parameter_or("rotation_axis", param.hand_search_params.rotation_axis_, 2);
+  // TODO
+  node->get_parameter_or("rotation_axis", param.rotation_axis_, 2);
 
   // Read plotting parameters.
-  node->get_parameter_or("plot_samples", param.plot_samples_, false);
-  node->get_parameter_or("plot_normals", param.plot_normals_, false);
-  param.generator_params.plot_normals_ = param.plot_normals_;
-  node->get_parameter_or("plot_filtered_grasps", param.plot_filtered_grasps_, false);
-  node->get_parameter_or("plot_valid_grasps", param.plot_valid_grasps_, false);
-  node->get_parameter_or("plot_clusters", param.plot_clusters_, false);
-  node->get_parameter_or("plot_selected_grasps", param.plot_selected_grasps_, false);
-
-  // Read general parameters.
-  param.generator_params.num_samples_ = param.hand_search_params.num_samples_;
-  param.generator_params.num_threads_ = param.hand_search_params.num_threads_;
-  node->get_parameter_or("plot_candidates", param.generator_params.plot_grasps_, false);
+  node->get_parameter_or("plot_samples", param.plot_params.plot_samples_, false);
+  node->get_parameter_or("plot_normals", param.plot_params.plot_normals_, false);
+  //param.generator_params_params.plot_normals_ = param.plot_normals_;
+  node->get_parameter_or("plot_filtered_grasps", param.plot_params.plot_filtered_grasps_, false);
+  node->get_parameter_or("plot_valid_grasps", param.plot_params.plot_valid_grasps_, false);
+  node->get_parameter_or("plot_clusters", param.plot_params.plot_clusters_, false);
+  node->get_parameter_or("plot_selected_grasps", param.plot_params.plot_selected_grasps_, false);
 
   // Read preprocessing parameters.
   node->get_parameter_or("remove_outliers", param.generator_params.remove_statistical_outliers_,
@@ -59,7 +55,7 @@ void ROSParameters::getDetectionParams(
   node->get_parameter_or("voxelize", param.generator_params.voxelize_, true);
   node->get_parameter_or("workspace", param.generator_params.workspace_,
     std::vector<double>(std::initializer_list<double>({-1.0, 1.0, -1.0, 1.0, -1.0, 1.0})));
-  param.workspace_ = param.generator_params.workspace_;
+  param.workspace_grasps_ = param.generator_params.workspace_;
 
   // Read classification parameters and create classifier.
   node->get_parameter_or("model_file", param.model_file_, std::string(""));
@@ -69,17 +65,18 @@ void ROSParameters::getDetectionParams(
   node->get_parameter_or("device", param.device_, 0);
 
   // Read grasp image parameters.
-  node->get_parameter_or("image_outer_diameter", param.image_params.outer_diameter_,
-    param.hand_search_params.hand_outer_diameter_);
-  node->get_parameter_or("image_depth", param.image_params.depth_,
-    param.hand_search_params.hand_depth_);
-  node->get_parameter_or("image_height", param.image_params.height_,
-    param.hand_search_params.hand_height_);
+  // node->get_parameter_or("image_outer_diameter", param.hand_search_params.hand_geometry.outer_diameter_,
+  //   param.hand_search_params_params.hand_outer_diameter_);
+  // node->get_parameter_or("image_depth", param.image_params.depth_,
+  //   param.hand_search_params_params.hand_depth_);
+  // node->get_parameter_or("image_height", param.image_params.height_,
+  //   param.hand_search_params_params.hand_height_);
+  // TODO
   node->get_parameter_or("image_size", param.image_params.size_, 60);
   node->get_parameter_or("image_num_channels", param.image_params.num_channels_, 15);
 
   // Read learning parameters.
-  node->get_parameter_or("remove_plane_before_image_calculation", param.remove_plane_, false);
+  node->get_parameter_or("remove_plane_before_image_calculation", param.plot_params.remove_plane_, false);
 
   // Read grasp filtering parameters
   node->get_parameter_or("filter_grasps", param.filter_grasps_, false);

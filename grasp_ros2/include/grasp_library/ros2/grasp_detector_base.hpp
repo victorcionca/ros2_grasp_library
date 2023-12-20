@@ -17,6 +17,8 @@
 
 #include <grasp_msgs/msg/grasp_config_list.hpp>
 #include <string>
+#include "tf2/LinearMath/Vector3.h"
+#include "gpd/grasp_detector.h"
 
 namespace grasp_ros2
 {
@@ -47,7 +49,8 @@ public:
  */
 class GraspDetectorBase
 {
-public:
+  public:
+
   /**
    * \brief Constructor.
    */
